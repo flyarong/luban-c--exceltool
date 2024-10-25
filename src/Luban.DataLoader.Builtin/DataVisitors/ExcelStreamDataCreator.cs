@@ -155,35 +155,16 @@ class ExcelStreamDataCreator : ITypeFuncVisitor<ExcelStream, DType>
     public DType Accept(TString type, ExcelStream x)
     {
         var d = x.Read();
-        var s = ParseString(d);
+        var s = SheetDataCreator.ParseString(d, type.IsNullable);
         if (s == null)
         {
             if (type.IsNullable)
             {
                 return null;
             }
-            else
-            {
-                throw new InvalidExcelDataException("字段不是nullable类型，不能为null");
-            }
+            throw new InvalidExcelDataException("字段不是nullable类型，不能为null");
         }
         return DString.ValueOf(type, s);
-    }
-
-    private static string ParseString(object d)
-    {
-        if (d == null)
-        {
-            return string.Empty;
-        }
-        else if (d is string s)
-        {
-            return DataUtil.UnEscapeRawString(s);
-        }
-        else
-        {
-            return d.ToString();
-        }
     }
 
     public DType Accept(TDateTime type, ExcelStream x)
@@ -262,14 +243,20 @@ class ExcelStreamDataCreator : ITypeFuncVisitor<ExcelStream, DType>
         {
             if (type.IsNullable)
             {
-                string subType = x.Read().ToString().Trim();
-                if (subType == FieldNames.BeanNullType)
+                if (x.TryPeed(out object subTypeObj)) //ToString().Trim();
                 {
-                    return null;
-                }
-                else if (subType != FieldNames.BeanNotNullType && subType != originBean.Name)
-                {
-                    throw new Exception($"type:'{originBean.FullName}' 可空标识:'{subType}' 不合法（只能为{FieldNames.BeanNotNullType}或{FieldNames.BeanNullType}或{originBean.Name})");
+                    string subType = subTypeObj.ToString().Trim();
+
+                    if (subType == FieldNames.BeanNullType)
+                    {
+                        x.Read();
+                        return null;
+                    }
+                    else if (subType == FieldNames.BeanNotNullType || subType == originBean.Name)
+                    {
+                        x.Read();
+                        //throw new Exception($"type:'{originBean.FullName}' 可空标识:'{subType}' 不合法（只能为{FieldNames.BeanNotNullType}或{FieldNames.BeanNullType}或{originBean.Name})");
+                    }
                 }
             }
             return new DBean(type, originBean, CreateBeanFields(originBean, x));
